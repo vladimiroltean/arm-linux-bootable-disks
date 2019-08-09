@@ -8,7 +8,7 @@ vendor_mounted=false
 
 usage() {
 	echo "Usage:"
-	echo "$0 --mount-point <dir> --rootfs <file.tar.gz> --out <blk-device>|<disk-image> --label <name> --dtb <file> --uImage <file>"
+	echo "$0 --mount-point <dir> --rootfs <file.tar.gz> --out <blk-device>|<disk-image> --label <name> --dtb <file> --uImage <file> [--uboot <file>]"
 	exit
 }
 
@@ -76,6 +76,10 @@ while [ $i -lt $argc ]; do
 		uimage="${argv[$i]}"
 		i=$((i + 1))
 		;;
+	-U|--uboot)
+		uboot="${argv[$i]}"
+		i=$((i + 1))
+		;;
 	*)
 		usage
 		;;
@@ -89,7 +93,11 @@ if [ -z "${label}" ]; then echo "Please specify --label"; exit; fi
 if [ -z "${dtb}" ]; then echo "Please specify --dtb"; exit; fi
 if [ -z "${uimage}" ]; then echo "Please specify --uImage"; exit; fi
 
-vendor_sector_start=2048
+if [ -n "${uboot}" ]; then
+	vendor_sector_start=8000
+else
+	vendor_sector_start=2048
+fi
 rootfs_sector_start=1026048
 
 if [ -b "${out}" ]; then
@@ -103,10 +111,16 @@ fi
 vendor_sector_end=$((${rootfs_sector_start} - 1))
 rootfs_sector_end=$((${size_sectors} - 50))
 
-sgdisk --clear --zap-all \
-	--new=1:${vendor_sector_start}:${vendor_sector_end} --change-name=1:vendor --typecode=1:ef00 \
-	--new=2:${rootfs_sector_start}:${rootfs_sector_end} --change-name=2:rootfs --typecode=2:8307 \
-	"${out}"
+if [ -n "${uboot}" ]; then
+	parted -s "${out}" mktable msdos \
+		mkpart primary fat32 "${vendor_sector_start}s" "${vendor_sector_end}s" \
+		mkpart primary ext4 "${rootfs_sector_start}s" "${rootfs_sector_end}s"
+else
+	sgdisk --clear --zap-all \
+		--new=1:${vendor_sector_start}:${vendor_sector_end} --change-name=1:vendor --typecode=1:ef00 \
+		--new=2:${rootfs_sector_start}:${rootfs_sector_end} --change-name=2:rootfs --typecode=2:8307 \
+		"${out}"
+fi
 
 if ! [ -b "${out}" ]; then
 	loop=$(losetup --show -f "${out}")
@@ -116,11 +130,17 @@ if ! [ -b "${out}" ]; then
 fi
 
 if [ -b "${out}" ]; then
+	dev="${out}"
 	vendor_part="${out}1"
 	rootfs_part="${out}2"
 else
+	dev="${loop}"
 	vendor_part="${loop}p1"
 	rootfs_part="${loop}p2"
+fi
+
+if [ -n "${uboot}" ]; then
+	dd if="${uboot}" of="${dev}" bs=512 seek=8
 fi
 
 mkfs.vfat $vendor_part
