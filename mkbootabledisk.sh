@@ -150,7 +150,7 @@ mkdir -p "${mnt}/rootfs"
 mount -o rw "${rootfs_part}" "${mnt}/rootfs" && rootfs_mounted=true
 # Ignore unknown extended header keywords
 echo "Extracting rootfs..."
-tar xf "${rootfs}" -C "${mnt}/rootfs" 2>/dev/null || :
+bsdtar -xpf "${rootfs}" -C "${mnt}/rootfs" || :
 
 echo "Creating vendor partition..."
 mkdir -p "${mnt}/vendor"
