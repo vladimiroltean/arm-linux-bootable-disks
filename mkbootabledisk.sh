@@ -46,6 +46,7 @@ rootfs=
 label=
 dtb=
 uimage=
+uboot=
 
 i=0
 while [ $i -lt $argc ]; do
