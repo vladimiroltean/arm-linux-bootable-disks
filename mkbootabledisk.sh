@@ -87,6 +87,7 @@ while [ $i -lt $argc ]; do
 		i=$((i + 1))
 		;;
 	*)
+		echo "Unkown option \"${key}\""
 		usage
 		;;
 	esac
