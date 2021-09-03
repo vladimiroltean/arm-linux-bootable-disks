@@ -188,6 +188,18 @@ mount -o rw "${rootfs_part}" "${mnt}/rootfs" && rootfs_mounted=true
 echo "Extracting rootfs..."
 bsdtar -xpf "${rootfs}" -C "${mnt}/rootfs" || :
 
+rootfs_partuuid=$(blkid "${rootfs_part}" | awk '{ for(i=1;i<=NF;i++) if ($i ~ /PARTUUID/) print $i }')
+case ${rootfs_partuuid} in
+PARTUUID=*)
+	;;
+*)
+	echo "Could not determine rootfs partition UUID, got ${rootfs_partuuid}, exiting."
+	exit 1
+	;;
+esac
+# Strip the quotes from the PARTUUID
+rootfs_partuuid=${rootfs_partuuid//\"/}
+
 echo "Creating vendor partition..."
 mkdir -p "${mnt}/vendor"
 mount -o rw "${vendor_part}" "${mnt}/vendor" && vendor_mounted=true
@@ -198,7 +210,7 @@ bash -c "cat > ${mnt}/vendor/extlinux/extlinux.conf" <<-EOF
 label ${label}
   kernel ../$(basename ${kernel})
   devicetree ../$(basename ${dtb})
-  append console=${console} root=/dev/mmcblk0p2 rw rootwait ${extra_cmdline}
+  append console=${console} root=${rootfs_partuuid} rw rootwait ${extra_cmdline}
 EOF
 
 if [ -n "${uboot_script}" ]; then
