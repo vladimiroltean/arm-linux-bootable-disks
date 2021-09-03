@@ -200,6 +200,13 @@ esac
 # Strip the quotes from the PARTUUID
 rootfs_partuuid=${rootfs_partuuid//\"/}
 
+tty=${console%,*}
+if [ -f ${mnt}/rootfs/etc/securetty ]; then
+	if ! grep -q ${tty} ${mnt}/rootfs/etc/securetty; then
+		echo "Warning: TTY device ${tty} missing from /etc/securetty, root login might be unavailable"
+	fi
+fi
+
 echo "Creating vendor partition..."
 mkdir -p "${mnt}/vendor"
 mount -o rw "${vendor_part}" "${mnt}/vendor" && vendor_mounted=true
