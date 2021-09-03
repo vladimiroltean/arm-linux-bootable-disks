@@ -47,6 +47,7 @@ label=
 dtb=
 uimage=
 uboot=
+uboot_script=
 
 i=0
 while [ $i -lt $argc ]; do
@@ -81,6 +82,10 @@ while [ $i -lt $argc ]; do
 		uboot="${argv[$i]}"
 		i=$((i + 1))
 		;;
+	-s|--uboot-script)
+		uboot_script="${argv[$i]}"
+		i=$((i + 1))
+		;;
 	*)
 		usage
 		;;
@@ -93,6 +98,17 @@ if [ -z "${rootfs}" ]; then echo "Please specify --rootfs"; exit; fi
 if [ -z "${label}" ]; then echo "Please specify --label"; exit; fi
 if [ -z "${dtb}" ]; then echo "Please specify --dtb"; exit; fi
 if [ -z "${uimage}" ]; then echo "Please specify --uImage"; exit; fi
+
+if [ -n "${uboot_script}" ]; then
+	case "${uboot_script}" in
+	*.cmd)
+		;;
+	*)
+		echo "The U-Boot script file name must end in *.cmd"
+		exit 1
+		;;
+	esac
+fi
 
 if [ -n "${uboot}" ]; then
 	vendor_sector_start=8000
@@ -165,3 +181,9 @@ label ${label}
   devicetree ../$(basename ${dtb})
   append console=ttyS0,115200n8 root=/dev/mmcblk0p2 rw rootwait
 EOF
+
+if [ -n "${uboot_script}" ]; then
+	uboot_script_bin="${uboot_script%.cmd}.scr"
+
+	mkimage -C none -T script -d "${uboot_script}" "${uboot_script_bin}"
+fi
