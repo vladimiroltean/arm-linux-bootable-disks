@@ -8,7 +8,7 @@ vendor_mounted=false
 
 usage() {
 	echo "Usage:"
-	echo "$0 --mount-point <dir> --rootfs <file.tar.gz> --out <blk-device>|<disk-image> --label <name> --dtb <file> --uImage <file> [--uboot <file>]"
+	echo "$0 --mount-point <dir> --rootfs <file.tar.gz> --out <blk-device>|<disk-image> --label <name> --dtb <file> --kernel <file> [--uboot <file>]"
 	exit
 }
 
@@ -45,7 +45,7 @@ out=
 rootfs=
 label=
 dtb=
-uimage=
+kernel=
 uboot=
 uboot_script=
 
@@ -74,8 +74,8 @@ while [ $i -lt $argc ]; do
 		dtb="${argv[$i]}"
 		i=$((i + 1))
 		;;
-	-u|--uImage)
-		uimage="${argv[$i]}"
+	-k|--kernel)
+		kernel="${argv[$i]}"
 		i=$((i + 1))
 		;;
 	-U|--uboot)
@@ -97,7 +97,7 @@ if [ -z "${out}" ]; then echo "Please specify --out"; exit; fi
 if [ -z "${rootfs}" ]; then echo "Please specify --rootfs"; exit; fi
 if [ -z "${label}" ]; then echo "Please specify --label"; exit; fi
 if [ -z "${dtb}" ]; then echo "Please specify --dtb"; exit; fi
-if [ -z "${uimage}" ]; then echo "Please specify --uImage"; exit; fi
+if [ -z "${kernel}" ]; then echo "Please specify --kernel"; exit; fi
 
 if [ -n "${uboot_script}" ]; then
 	case "${uboot_script}" in
@@ -173,11 +173,11 @@ echo "Creating vendor partition..."
 mkdir -p "${mnt}/vendor"
 mount -o rw "${vendor_part}" "${mnt}/vendor" && vendor_mounted=true
 mkdir -p "${mnt}/vendor/extlinux"
-install -Dm0755 ${uimage} "${mnt}/vendor/"
+install -Dm0755 ${kernel} "${mnt}/vendor/"
 install -Dm0755 ${dtb} "${mnt}/vendor/"
 bash -c "cat > ${mnt}/vendor/extlinux/extlinux.conf" <<-EOF
 label ${label}
-  kernel ../$(basename ${uimage})
+  kernel ../$(basename ${kernel})
   devicetree ../$(basename ${dtb})
   append console=ttyS0,115200n8 root=/dev/mmcblk0p2 rw rootwait
 EOF
