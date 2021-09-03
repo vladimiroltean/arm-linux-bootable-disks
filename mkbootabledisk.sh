@@ -7,8 +7,14 @@ rootfs_mounted=false
 vendor_mounted=false
 
 usage() {
-	echo "Usage:"
-	echo "$0 --mount-point <dir> --rootfs <file.tar.gz> --out <blk-device>|<disk-image> --label <name> --dtb <file> --kernel <file> [--uboot <file>]"
+	echo "$0 usage options:"
+	echo "--mount-point <dir>: Temporary directory for extracting rootfs and vendor partition"
+	echo "--rootfs <file.tar.gz>: Path to input rootfs file"
+	echo "--out <blk-device>|<disk-image>: Path to output block device or disk image (the type will be detected automatically)"
+	echo "--label <name>: Name for the OS as will be seen in extlinux.conf"
+	echo "--dtb <file>: Path to input device tree blob"
+	echo "--kernel <file>: Path to input kernel file, different formats such as Image, Image.gz, uImage can be used"
+	echo "[--uboot <file>]: Optional path to input U-Boot binary, for boards that can load it from removable media. Currently hardcoded for Layerscape LS1021A"
 	exit
 }
 
