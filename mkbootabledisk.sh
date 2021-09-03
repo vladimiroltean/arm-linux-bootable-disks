@@ -15,6 +15,8 @@ usage() {
 	echo "--dtb <file>: Path to input device tree blob"
 	echo "--kernel <file>: Path to input kernel file, different formats such as Image, Image.gz, uImage can be used"
 	echo "[--uboot <file>]: Optional path to input U-Boot binary, for boards that can load it from removable media. Currently hardcoded for Layerscape LS1021A"
+	echo "[--console \"ttyS0,115200\"]: Optional override for boards that do not use ttyS0"
+	echo "[--extra-cmdline \"add here\"]: Optional extra cmdline parameters"
 	exit
 }
 
@@ -54,6 +56,8 @@ dtb=
 kernel=
 uboot=
 uboot_script=
+console="ttyS0,115200n8"
+extra_cmdline=
 
 i=0
 while [ $i -lt $argc ]; do
@@ -90,6 +94,14 @@ while [ $i -lt $argc ]; do
 		;;
 	-s|--uboot-script)
 		uboot_script="${argv[$i]}"
+		i=$((i + 1))
+		;;
+	-c|--console)
+		console="${argv[$i]}"
+		i=$((i + 1))
+		;;
+	-C|--extra-cmdline)
+		extra_cmdline="${argv[$i]}"
 		i=$((i + 1))
 		;;
 	*)
@@ -186,7 +198,7 @@ bash -c "cat > ${mnt}/vendor/extlinux/extlinux.conf" <<-EOF
 label ${label}
   kernel ../$(basename ${kernel})
   devicetree ../$(basename ${dtb})
-  append console=ttyS0,115200n8 root=/dev/mmcblk0p2 rw rootwait
+  append console=${console} root=/dev/mmcblk0p2 rw rootwait ${extra_cmdline}
 EOF
 
 if [ -n "${uboot_script}" ]; then
