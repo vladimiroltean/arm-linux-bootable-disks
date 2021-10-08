@@ -240,3 +240,5 @@ if [ -n "${uboot_script}" ]; then
 
 	mkimage -C none -T script -d "${uboot_script}" "${uboot_script_bin}"
 fi
+
+sync
