@@ -32,15 +32,15 @@ trap 'error ${LINENO}' ERR
 do_cleanup() {
 	if [ ${rootfs_mounted} = true ]; then
 		echo "Unmounting rootfs..."
-		umount "${mnt}/rootfs"
+		sudo umount "${mnt}/rootfs"
 	fi
 	if [ ${vendor_mounted} = true ]; then
 		echo "Unmounting vendor partition..."
-		umount "${mnt}/vendor"
+		sudo umount "${mnt}/vendor"
 	fi
 	if [ ${loop_mounted} = true ]; then
 		echo "Unmounting loop device..."
-		losetup -d "${loop}"
+		sudo losetup -d "${loop}"
 	fi
 }
 trap do_cleanup EXIT
@@ -142,7 +142,7 @@ if [ -n "${vendor_script}" ]; then
 fi
 
 if [ -b "${out}" ]; then
-	size_sectors=$(blockdev --getsize "${out}")
+	size_sectors=$(sudo blockdev --getsize "${out}")
 else
 	rm -rf "${out}"
 	fallocate -l 8G "${out}"
@@ -154,12 +154,12 @@ rootfs_sector_end=$((${size_sectors} - 50))
 
 case ${ptable} in
 mbr)
-	parted -s "${out}" mktable msdos \
+	sudo parted -s "${out}" mktable msdos \
 		mkpart primary fat32 "${vendor_sector_start}s" "${vendor_sector_end}s" \
 		mkpart primary ext4 "${rootfs_sector_start}s" "${rootfs_sector_end}s"
 	;;
 gpt)
-	sgdisk --clear --zap-all \
+	sudo sgdisk --clear --zap-all \
 		--new=1:${vendor_sector_start}:${vendor_sector_end} --change-name=1:vendor --typecode=1:ef00 \
 		--new=2:${rootfs_sector_start}:${rootfs_sector_end} --change-name=2:rootfs --typecode=2:8307 \
 		"${out}"
@@ -171,10 +171,10 @@ gpt)
 esac
 
 if ! [ -b "${out}" ]; then
-	loop=$(losetup --show -f "${out}")
+	loop=$(sudo losetup --show -f "${out}")
 	loop_mounted=true
 	echo "Mounted ${out} at ${loop}"
-	partprobe "${loop}"
+	sudo partprobe "${loop}"
 fi
 
 if [ -b "${out}" ]; then
@@ -191,14 +191,14 @@ step_build_firmware
 
 step_flash_firmware "${dev}"
 
-mkfs.vfat $vendor_part
-mkfs.ext4 $rootfs_part
+sudo mkfs.vfat $vendor_part
+sudo mkfs.ext4 $rootfs_part
 
 mkdir -p "${mnt}/rootfs"
-mount -o rw "${rootfs_part}" "${mnt}/rootfs" && rootfs_mounted=true
+sudo mount -o rw "${rootfs_part}" "${mnt}/rootfs" && rootfs_mounted=true
 # Ignore unknown extended header keywords
 echo "Extracting rootfs..."
-bsdtar -xpf "${rootfs}" -C "${mnt}/rootfs" || :
+sudo bsdtar -xpf "${rootfs}" -C "${mnt}/rootfs" || :
 
 rootfs_partuuid=$(blkid "${rootfs_part}" | awk '{ for(i=1;i<=NF;i++) if ($i ~ /PARTUUID/) print $i }')
 case ${rootfs_partuuid} in
@@ -220,12 +220,12 @@ if [ -f ${mnt}/rootfs/etc/securetty ]; then
 fi
 
 echo "Creating vendor partition..."
-mkdir -p "${mnt}/vendor"
-mount -o rw "${vendor_part}" "${mnt}/vendor" && vendor_mounted=true
-mkdir -p "${mnt}/vendor/extlinux"
-install -Dm0755 ${kernel} "${mnt}/vendor/"
-install -Dm0755 ${dtb} "${mnt}/vendor/"
-bash -c "cat > ${mnt}/vendor/extlinux/extlinux.conf" <<-EOF
+sudo mkdir -p "${mnt}/vendor"
+sudo mount -o rw "${vendor_part}" "${mnt}/vendor" && vendor_mounted=true
+sudo mkdir -p "${mnt}/vendor/extlinux"
+sudo install -Dm0755 ${kernel} "${mnt}/vendor/"
+sudo install -Dm0755 ${dtb} "${mnt}/vendor/"
+sudo bash -c "cat > ${mnt}/vendor/extlinux/extlinux.conf" <<-EOF
 label ${label}
   kernel ../$(basename ${kernel})
   devicetree ../$(basename ${dtb})
