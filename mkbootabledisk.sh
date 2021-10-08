@@ -17,6 +17,7 @@ usage() {
 	echo "[--uboot <file>]: Optional path to input U-Boot binary, for boards that can load it from removable media. Currently hardcoded for Layerscape LS1021A"
 	echo "[--console \"ttyS0,115200\"]: Optional override for boards that do not use ttyS0"
 	echo "[--extra-cmdline \"add here\"]: Optional extra cmdline parameters"
+	echo "[--uboot-script <file.cmd>]: Optional U-Boot script to be loaded by the bootloader instead of the extlinux.conf (which is still generated)"
 	exit
 }
 
