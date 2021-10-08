@@ -14,10 +14,9 @@ usage() {
 	echo "--label <name>: Name for the OS as will be seen in extlinux.conf"
 	echo "--dtb <file>: Path to input device tree blob"
 	echo "--kernel <file>: Path to input kernel file, different formats such as Image, Image.gz, uImage can be used"
-	echo "[--uboot <file>]: Optional path to input U-Boot binary, for boards that can load it from removable media. Currently hardcoded for Layerscape LS1021A"
-	echo "[--console \"ttyS0,115200\"]: Optional override for boards that do not use ttyS0"
 	echo "[--extra-cmdline \"add here\"]: Optional extra cmdline parameters"
 	echo "[--uboot-script <file.cmd>]: Optional U-Boot script to be loaded by the bootloader instead of the extlinux.conf (which is still generated)"
+	echo "[--vendor-script <file.sh>]: Optional Bash script to override U-Boot flashing procedure, add extra files to vendor partition etc"
 	exit
 }
 
@@ -46,6 +45,18 @@ do_cleanup() {
 }
 trap do_cleanup EXIT
 
+step_flash_firmware() {
+	:
+}
+
+step_append_rootfs_partition() {
+	:
+}
+
+step_append_vendor_partition() {
+	:
+}
+
 argc=$#
 argv=( "$@" )
 
@@ -55,10 +66,11 @@ rootfs=
 label=
 dtb=
 kernel=
-uboot=
 uboot_script=
 console="ttyS0,115200n8"
 extra_cmdline=
+vendor_script=
+ptable="gpt"
 
 i=0
 while [ $i -lt $argc ]; do
@@ -89,20 +101,12 @@ while [ $i -lt $argc ]; do
 		kernel="${argv[$i]}"
 		i=$((i + 1))
 		;;
-	-U|--uboot)
-		uboot="${argv[$i]}"
-		i=$((i + 1))
-		;;
 	-s|--uboot-script)
 		uboot_script="${argv[$i]}"
 		i=$((i + 1))
 		;;
-	-c|--console)
-		console="${argv[$i]}"
-		i=$((i + 1))
-		;;
-	-C|--extra-cmdline)
-		extra_cmdline="${argv[$i]}"
+	-v|--vendor-script)
+		vendor_script="${argv[$i]}"
 		i=$((i + 1))
 		;;
 	*)
@@ -130,12 +134,12 @@ if [ -n "${uboot_script}" ]; then
 	esac
 fi
 
-if [ -n "${uboot}" ]; then
-	vendor_sector_start=8000
-else
-	vendor_sector_start=2048
-fi
+vendor_sector_start=2048
 rootfs_sector_start=1026048
+
+if [ -n "${vendor_script}" ]; then
+	source "${vendor_script}"
+fi
 
 if [ -b "${out}" ]; then
 	size_sectors=$(blockdev --getsize "${out}")
@@ -148,16 +152,23 @@ fi
 vendor_sector_end=$((${rootfs_sector_start} - 1))
 rootfs_sector_end=$((${size_sectors} - 50))
 
-if [ -n "${uboot}" ]; then
+case ${ptable} in
+mbr)
 	parted -s "${out}" mktable msdos \
 		mkpart primary fat32 "${vendor_sector_start}s" "${vendor_sector_end}s" \
 		mkpart primary ext4 "${rootfs_sector_start}s" "${rootfs_sector_end}s"
-else
+	;;
+gpt)
 	sgdisk --clear --zap-all \
 		--new=1:${vendor_sector_start}:${vendor_sector_end} --change-name=1:vendor --typecode=1:ef00 \
 		--new=2:${rootfs_sector_start}:${rootfs_sector_end} --change-name=2:rootfs --typecode=2:8307 \
 		"${out}"
-fi
+	;;
+*)
+	echo "Unknown partition table type ${ptable}"
+	exit 1
+	;;
+esac
 
 if ! [ -b "${out}" ]; then
 	loop=$(losetup --show -f "${out}")
@@ -176,9 +187,9 @@ else
 	rootfs_part="${loop}p2"
 fi
 
-if [ -n "${uboot}" ]; then
-	dd if="${uboot}" of="${dev}" bs=512 seek=8
-fi
+step_build_firmware
+
+step_flash_firmware "${dev}"
 
 mkfs.vfat $vendor_part
 mkfs.ext4 $rootfs_part
@@ -220,6 +231,9 @@ label ${label}
   devicetree ../$(basename ${dtb})
   append console=${console} root=${rootfs_partuuid} rw rootwait ${extra_cmdline}
 EOF
+
+step_append_vendor_partition "${mnt}/vendor"
+step_append_rootfs_partition "${mnt}/rootfs"
 
 if [ -n "${uboot_script}" ]; then
 	uboot_script_bin="${uboot_script%.cmd}.scr"
