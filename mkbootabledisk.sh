@@ -140,6 +140,9 @@ step_prepare_vendor_partition() {
 	sudo mkdir -p "${mnt}/vendor/extlinux"
 	sudo install -Dm0755 ${kernel} "${mnt}/vendor/"
 	sudo install -Dm0755 ${dtb} "${mnt}/vendor/"
+	if [ -n "${uboot_script_bin}" ]; then
+		sudo install -Dm0755 "${uboot_script_bin}" "${mnt}/vendor"
+	fi
 	sudo bash -c "cat > ${mnt}/vendor/extlinux/extlinux.conf" <<-EOF
 	label ${label}
 	  kernel ../$(basename ${kernel})
@@ -169,6 +172,7 @@ uboot_script=
 console="ttyS0,115200n8"
 extra_cmdline=
 vendor_script=
+uboot_script_bin=
 ptable="gpt"
 
 i=0
