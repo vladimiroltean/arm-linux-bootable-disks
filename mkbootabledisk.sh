@@ -45,8 +45,107 @@ do_cleanup() {
 }
 trap do_cleanup EXIT
 
+# Do not expect vendor scripts to override this
+step_prepare_partition_table() {
+	if [ -b "${out}" ]; then
+		size_sectors=$(sudo blockdev --getsize "${out}")
+	else
+		rm -rf "${out}"
+		fallocate -l 8G "${out}"
+		size_sectors=$(($(stat --printf="%s" "${out}") / 512))
+	fi
+
+	vendor_sector_end=$((${rootfs_sector_start} - 1))
+	rootfs_sector_end=$((${size_sectors} - 50))
+
+	case ${ptable} in
+	mbr)
+		sudo parted -s "${out}" mktable msdos \
+			mkpart primary fat32 "${vendor_sector_start}s" "${vendor_sector_end}s" \
+			mkpart primary ext4 "${rootfs_sector_start}s" "${rootfs_sector_end}s"
+		;;
+	gpt)
+		sudo sgdisk --clear --zap-all \
+			--new=1:${vendor_sector_start}:${vendor_sector_end} --change-name=1:vendor --typecode=1:ef00 \
+			--new=2:${rootfs_sector_start}:${rootfs_sector_end} --change-name=2:rootfs --typecode=2:8307 \
+			"${out}"
+		;;
+	*)
+		echo "Unknown partition table type ${ptable}"
+		exit 1
+		;;
+	esac
+}
+
+# Do not expect vendor scripts to override this
+step_mount_loop_device() {
+	if ! [ -b "${out}" ]; then
+		loop=$(sudo losetup --show -f "${out}")
+		loop_mounted=true
+		echo "Mounted ${out} at ${loop}"
+		sudo partprobe "${loop}"
+	fi
+}
+
 step_flash_firmware() {
 	:
+}
+
+# Do not expect vendor scripts to override this
+step_prepare_uboot_script() {
+	if [ -n "${uboot_script}" ]; then
+		uboot_script_bin="${uboot_script%.cmd}.scr"
+
+		mkimage -C none -T script -d "${uboot_script}" "${uboot_script_bin}"
+	fi
+}
+
+# Do not expect vendor scripts to override this
+step_prepare_rootfs_partition() {
+	sudo mkfs.ext4 $rootfs_part
+
+	mkdir -p "${mnt}/rootfs"
+	sudo mount -o rw "${rootfs_part}" "${mnt}/rootfs" && rootfs_mounted=true
+	# Ignore unknown extended header keywords
+	echo "Extracting rootfs..."
+	sudo bsdtar -xpf "${rootfs}" -C "${mnt}/rootfs" || :
+
+	rootfs_partuuid=$(blkid "${rootfs_part}" | awk '{ for(i=1;i<=NF;i++) if ($i ~ /PARTUUID/) print $i }')
+	case ${rootfs_partuuid} in
+	PARTUUID=*)
+		;;
+	*)
+		echo "Could not determine rootfs partition UUID, got ${rootfs_partuuid}, exiting."
+		exit 1
+		;;
+	esac
+	# Strip the quotes from the PARTUUID
+	rootfs_partuuid=${rootfs_partuuid//\"/}
+
+	tty=${console%,*}
+	if [ -f ${mnt}/rootfs/etc/securetty ]; then
+		if ! grep -q ${tty} ${mnt}/rootfs/etc/securetty; then
+			echo "Warning: TTY device ${tty} missing from /etc/securetty, root login might be unavailable"
+		fi
+	fi
+}
+
+# Do not expect vendor scripts to override this
+step_prepare_vendor_partition() {
+	sudo mkfs.vfat $vendor_part
+
+	echo "Creating vendor partition..."
+	sudo mkdir -p "${mnt}/vendor"
+	sudo mount -o rw "${vendor_part}" "${mnt}/vendor" && vendor_mounted=true
+	sudo mkdir -p "${mnt}/vendor/extlinux"
+	sudo install -Dm0755 ${kernel} "${mnt}/vendor/"
+	sudo install -Dm0755 ${dtb} "${mnt}/vendor/"
+	sudo bash -c "cat > ${mnt}/vendor/extlinux/extlinux.conf" <<-EOF
+	label ${label}
+	  kernel ../$(basename ${kernel})
+	  devicetree ../$(basename ${dtb})
+	  append console=${console} root=${rootfs_partuuid} rw rootwait ${extra_cmdline}
+	EOF
 }
 
 step_append_rootfs_partition() {
@@ -141,41 +240,13 @@ if [ -n "${vendor_script}" ]; then
 	source "${vendor_script}"
 fi
 
-if [ -b "${out}" ]; then
-	size_sectors=$(sudo blockdev --getsize "${out}")
-else
-	rm -rf "${out}"
-	fallocate -l 8G "${out}"
-	size_sectors=$(($(stat --printf="%s" "${out}") / 512))
-fi
+step_prepare_partition_table
 
-vendor_sector_end=$((${rootfs_sector_start} - 1))
-rootfs_sector_end=$((${size_sectors} - 50))
+step_mount_loop_device
 
-case ${ptable} in
-mbr)
-	sudo parted -s "${out}" mktable msdos \
-		mkpart primary fat32 "${vendor_sector_start}s" "${vendor_sector_end}s" \
-		mkpart primary ext4 "${rootfs_sector_start}s" "${rootfs_sector_end}s"
-	;;
-gpt)
-	sudo sgdisk --clear --zap-all \
-		--new=1:${vendor_sector_start}:${vendor_sector_end} --change-name=1:vendor --typecode=1:ef00 \
-		--new=2:${rootfs_sector_start}:${rootfs_sector_end} --change-name=2:rootfs --typecode=2:8307 \
-		"${out}"
-	;;
-*)
-	echo "Unknown partition table type ${ptable}"
-	exit 1
-	;;
-esac
+step_build_firmware
 
-if ! [ -b "${out}" ]; then
-	loop=$(sudo losetup --show -f "${out}")
-	loop_mounted=true
-	echo "Mounted ${out} at ${loop}"
-	sudo partprobe "${loop}"
-fi
+step_prepare_uboot_script
 
 if [ -b "${out}" ]; then
 	dev="${out}"
@@ -187,58 +258,14 @@ else
 	rootfs_part="${loop}p2"
 fi
 
-step_build_firmware
-
 step_flash_firmware "${dev}"
 
-sudo mkfs.vfat $vendor_part
-sudo mkfs.ext4 $rootfs_part
+step_prepare_rootfs_partition
 
-mkdir -p "${mnt}/rootfs"
-sudo mount -o rw "${rootfs_part}" "${mnt}/rootfs" && rootfs_mounted=true
-# Ignore unknown extended header keywords
-echo "Extracting rootfs..."
-sudo bsdtar -xpf "${rootfs}" -C "${mnt}/rootfs" || :
-
-rootfs_partuuid=$(blkid "${rootfs_part}" | awk '{ for(i=1;i<=NF;i++) if ($i ~ /PARTUUID/) print $i }')
-case ${rootfs_partuuid} in
-PARTUUID=*)
-	;;
-*)
-	echo "Could not determine rootfs partition UUID, got ${rootfs_partuuid}, exiting."
-	exit 1
-	;;
-esac
-# Strip the quotes from the PARTUUID
-rootfs_partuuid=${rootfs_partuuid//\"/}
-
-tty=${console%,*}
-if [ -f ${mnt}/rootfs/etc/securetty ]; then
-	if ! grep -q ${tty} ${mnt}/rootfs/etc/securetty; then
-		echo "Warning: TTY device ${tty} missing from /etc/securetty, root login might be unavailable"
-	fi
-fi
-
-echo "Creating vendor partition..."
-sudo mkdir -p "${mnt}/vendor"
-sudo mount -o rw "${vendor_part}" "${mnt}/vendor" && vendor_mounted=true
-sudo mkdir -p "${mnt}/vendor/extlinux"
-sudo install -Dm0755 ${kernel} "${mnt}/vendor/"
-sudo install -Dm0755 ${dtb} "${mnt}/vendor/"
-sudo bash -c "cat > ${mnt}/vendor/extlinux/extlinux.conf" <<-EOF
-label ${label}
-  kernel ../$(basename ${kernel})
-  devicetree ../$(basename ${dtb})
-  append console=${console} root=${rootfs_partuuid} rw rootwait ${extra_cmdline}
-EOF
+step_prepare_vendor_partition
 
 step_append_vendor_partition "${mnt}/vendor"
+
 step_append_rootfs_partition "${mnt}/rootfs"
-
-if [ -n "${uboot_script}" ]; then
-	uboot_script_bin="${uboot_script%.cmd}.scr"
-
-	mkimage -C none -T script -d "${uboot_script}" "${uboot_script_bin}"
-fi
 
 sync
