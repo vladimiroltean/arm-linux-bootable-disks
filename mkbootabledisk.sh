@@ -8,7 +8,6 @@ vendor_mounted=false
 
 usage() {
 	echo "$0 usage options:"
-	echo "--mount-point <dir>: Temporary directory for extracting rootfs and vendor partition"
 	echo "--rootfs <file.tar.gz>: Path to input rootfs file"
 	echo "--out <blk-device>|<disk-image>: Path to output block device or disk image (the type will be detected automatically)"
 	echo "--label <name>: Name for the OS as will be seen in extlinux.conf"
@@ -102,13 +101,16 @@ step_prepare_uboot_script() {
 
 # Do not expect vendor scripts to override this
 step_prepare_rootfs_partition() {
+	local rootfs_part="${1}"
+	local rootfs_mnt="${2}"
+
 	sudo mkfs.ext4 $rootfs_part
 
-	mkdir -p "${mnt}/rootfs"
-	sudo mount -o rw "${rootfs_part}" "${mnt}/rootfs" && rootfs_mounted=true
+	mkdir -p "${rootfs_mnt}"
+	sudo mount -o rw "${rootfs_part}" "${rootfs_mnt}" && rootfs_mounted=true
 	# Ignore unknown extended header keywords
 	echo "Extracting rootfs..."
-	sudo bsdtar -xpf "${rootfs}" -C "${mnt}/rootfs" || :
+	sudo bsdtar -xpf "${rootfs}" -C "${rootfs_mnt}" || :
 
 	rootfs_partuuid=$(blkid "${rootfs_part}" | awk '{ for(i=1;i<=NF;i++) if ($i ~ /PARTUUID/) print $i }')
 	case ${rootfs_partuuid} in
@@ -123,8 +125,8 @@ step_prepare_rootfs_partition() {
 	rootfs_partuuid=${rootfs_partuuid//\"/}
 
 	tty=${console%,*}
-	if [ -f ${mnt}/rootfs/etc/securetty ]; then
-		if ! grep -q ${tty} ${mnt}/rootfs/etc/securetty; then
+	if [ -f "${rootfs_mnt}/etc/securetty" ]; then
+		if ! grep -q ${tty} "${rootfs_mnt}/etc/securetty"; then
 			echo "Warning: TTY device ${tty} missing from /etc/securetty, root login might be unavailable"
 		fi
 	fi
@@ -132,18 +134,21 @@ step_prepare_rootfs_partition() {
 
 # Do not expect vendor scripts to override this
 step_prepare_vendor_partition() {
+	local vendor_part="${1}"
+	local vendor_mnt="${2}"
+
 	sudo mkfs.vfat $vendor_part
 
 	echo "Creating vendor partition..."
-	sudo mkdir -p "${mnt}/vendor"
-	sudo mount -o rw "${vendor_part}" "${mnt}/vendor" && vendor_mounted=true
-	sudo mkdir -p "${mnt}/vendor/extlinux"
-	sudo install -Dm0755 ${kernel} "${mnt}/vendor/"
-	sudo install -Dm0755 ${dtb} "${mnt}/vendor/"
+	sudo mkdir -p "${vendor_mnt}"
+	sudo mount -o rw "${vendor_part}" "${vendor_mnt}" && vendor_mounted=true
+	sudo mkdir -p "${vendor_mnt}/extlinux"
+	sudo install -Dm0755 ${kernel} "${vendor_mnt}/"
+	sudo install -Dm0755 ${dtb} "${vendor_mnt}/"
 	if [ -n "${uboot_script_bin}" ]; then
-		sudo install -Dm0755 "${uboot_script_bin}" "${mnt}/vendor"
+		sudo install -Dm0755 "${uboot_script_bin}" "${vendor_mnt}"
 	fi
-	sudo bash -c "cat > ${mnt}/vendor/extlinux/extlinux.conf" <<-EOF
+	sudo bash -c "cat > ${vendor_mnt}/extlinux/extlinux.conf" <<-EOF
 	label ${label}
 	  kernel ../$(basename ${kernel})
 	  devicetree ../$(basename ${dtb})
@@ -180,10 +185,6 @@ while [ $i -lt $argc ]; do
 	key="${argv[$i]}"
 	i=$((i + 1))
 	case "$key" in
-	-m|--mount-point)
-		mnt="${argv[$i]}"
-		i=$((i + 1))
-		;;
 	-o|--out)
 		out="${argv[$i]}"
 		i=$((i + 1))
@@ -219,7 +220,6 @@ while [ $i -lt $argc ]; do
 	esac
 done
 
-if [ -z "${mnt}" ]; then echo "Please specify --mount-point"; exit; fi
 if [ -z "${out}" ]; then echo "Please specify --out"; exit; fi
 if [ -z "${rootfs}" ]; then echo "Please specify --rootfs"; exit; fi
 if [ -z "${label}" ]; then echo "Please specify --label"; exit; fi
@@ -264,9 +264,11 @@ fi
 
 step_flash_firmware "${dev}"
 
-step_prepare_rootfs_partition
+mnt=$(mktemp -d)
 
-step_prepare_vendor_partition
+step_prepare_rootfs_partition "${rootfs_part}" "${mnt}/rootfs"
+
+step_prepare_vendor_partition "${vendor_part}" "${mnt}/vendor"
 
 step_append_vendor_partition "${mnt}/vendor"
 
