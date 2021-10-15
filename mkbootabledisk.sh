@@ -44,6 +44,45 @@ do_cleanup() {
 }
 trap do_cleanup EXIT
 
+get_partuuid() {
+	local partition="${1}"
+	local partuuid=
+
+	partuuid=$(blkid "${partition}" | awk '{ for(i=1;i<=NF;i++) if ($i ~ /PARTUUID/) print $i }')
+	case ${partuuid} in
+	PARTUUID=*)
+		;;
+	*)
+		echo "Could not determine partition UUID, got ${partuuid}, exiting."
+		exit 1
+		;;
+	esac
+	# Strip the quotes from the PARTUUID
+	partuuid=${partuuid//\"/}
+	echo "${partuuid}"
+}
+
+full_steps=(
+	step_prepare_partition_table
+	step_mount_loop_device
+	step_build_firmware
+	step_prepare_uboot_script
+	step_flash_firmware
+	step_prepare_rootfs_partition
+	step_prepare_vendor_partition
+	step_append_vendor_partition
+	step_append_rootfs_partition
+	step_prepare_fstab
+)
+
+run_step() {
+	local step="${1}"
+
+	if [[ " ${steps[*]} " =~ " ${step} " ]]; then
+		$@
+	fi
+}
+
 # Do not expect vendor scripts to override this
 step_prepare_partition_table() {
 	if [ -b "${out}" ]; then
@@ -180,6 +219,7 @@ extra_cmdline=
 vendor_script=
 uboot_script_bin=
 ptable="gpt"
+steps=("${full_steps[@]}")
 
 i=0
 while [ $i -lt $argc ]; do
@@ -245,13 +285,13 @@ if [ -n "${vendor_script}" ]; then
 	source "${vendor_script}"
 fi
 
-step_prepare_partition_table
+run_step step_prepare_partition_table
 
-step_mount_loop_device
+run_step step_mount_loop_device
 
-step_build_firmware
+run_step step_build_firmware
 
-step_prepare_uboot_script
+run_step step_prepare_uboot_script
 
 if [ -b "${out}" ]; then
 	dev="${out}"
@@ -263,18 +303,18 @@ else
 	rootfs_part="${loop}p2"
 fi
 
-step_flash_firmware "${dev}"
+run_step step_flash_firmware "${dev}"
 
 mnt=$(mktemp -d)
 
-step_prepare_rootfs_partition "${rootfs_part}" "${mnt}/rootfs"
+run_step step_prepare_rootfs_partition "${rootfs_part}" "${mnt}/rootfs"
 
-step_prepare_vendor_partition "${vendor_part}" "${mnt}/vendor"
+run_step step_prepare_vendor_partition "${vendor_part}" "${mnt}/vendor"
 
-step_append_vendor_partition "${mnt}/vendor"
+run_step step_append_vendor_partition "${mnt}/vendor"
 
-step_append_rootfs_partition "${mnt}/rootfs"
+run_step step_append_rootfs_partition "${mnt}/rootfs"
 
-step_prepare_fstab
+run_step step_prepare_fstab
 
 sync
