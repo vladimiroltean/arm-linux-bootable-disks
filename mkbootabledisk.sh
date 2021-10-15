@@ -112,17 +112,7 @@ step_prepare_rootfs_partition() {
 	echo "Extracting rootfs..."
 	sudo bsdtar -xpf "${rootfs}" -C "${rootfs_mnt}" || :
 
-	rootfs_partuuid=$(blkid "${rootfs_part}" | awk '{ for(i=1;i<=NF;i++) if ($i ~ /PARTUUID/) print $i }')
-	case ${rootfs_partuuid} in
-	PARTUUID=*)
-		;;
-	*)
-		echo "Could not determine rootfs partition UUID, got ${rootfs_partuuid}, exiting."
-		exit 1
-		;;
-	esac
-	# Strip the quotes from the PARTUUID
-	rootfs_partuuid=${rootfs_partuuid//\"/}
+	rootfs_partuuid=$(get_partuuid ${rootfs_part})
 
 	tty=${console%,*}
 	if [ -f "${rootfs_mnt}/etc/securetty" ]; then
@@ -138,6 +128,8 @@ step_prepare_vendor_partition() {
 	local vendor_mnt="${2}"
 
 	sudo mkfs.vfat $vendor_part
+
+	vendor_partuuid=$(get_partuuid ${vendor_part})
 
 	echo "Creating vendor partition..."
 	sudo mkdir -p "${vendor_mnt}"
@@ -162,6 +154,15 @@ step_append_rootfs_partition() {
 
 step_append_vendor_partition() {
 	:
+}
+
+step_prepare_fstab() {
+	local rootfs_mnt="${1}"
+
+	sudo bash -c "cat > ${rootfs_mnt}/etc/fstab" <<-EOF
+PARTUUID="${vendor_partuuid}"	/boot		vfat	auto	0	0
+PARTUUID="${rootfs_partuuid}"	/		ext4	auto	0	0
+	EOF
 }
 
 argc=$#
@@ -273,5 +274,7 @@ step_prepare_vendor_partition "${vendor_part}" "${mnt}/vendor"
 step_append_vendor_partition "${mnt}/vendor"
 
 step_append_rootfs_partition "${mnt}/rootfs"
+
+step_prepare_fstab
 
 sync
