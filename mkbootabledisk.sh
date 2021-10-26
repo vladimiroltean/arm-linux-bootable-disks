@@ -16,6 +16,7 @@ usage() {
 	echo "[--extra-cmdline \"add here\"]: Optional extra cmdline parameters"
 	echo "[--uboot-script <file.cmd>]: Optional U-Boot script to be loaded by the bootloader instead of the extlinux.conf (which is still generated)"
 	echo "[--vendor-script <file.sh>]: Optional Bash script to override U-Boot flashing procedure, add extra files to vendor partition etc"
+	echo "[--profile full|build_firmware|flash_firmware]: Optionally skip some steps"
 	exit
 }
 
@@ -62,7 +63,7 @@ get_partuuid() {
 	echo "${partuuid}"
 }
 
-full_steps=(
+profile_full=(
 	step_prepare_partition_table
 	step_mount_loop_device
 	step_build_firmware
@@ -75,12 +76,34 @@ full_steps=(
 	step_prepare_fstab
 )
 
+profile_build_firmware=(
+	step_build_firmware
+	step_prepare_uboot_script
+)
+
+profile_flash_firmware=(
+	step_mount_loop_device
+	step_build_firmware
+	step_prepare_uboot_script
+	step_flash_firmware
+)
+
 run_step() {
 	local step="${1}"
 
-	if [[ " ${steps[*]} " =~ " ${step} " ]]; then
+	if [[ "${profile[*]}" =~ "${step}" ]]; then
 		$@
 	fi
+}
+
+should_write_to_output_device() {
+	if [[ "${profile[*]}" =~ step_flash_firmware ]] ||
+	   [[ "${profile[*]}" =~ step_prepare_rootfs_partition ]] ||
+	   [[ "${profile[*]}" =~ step_prepare_vendor_partition ]]; then
+		return 0
+	fi
+
+	return 1
 }
 
 # Do not expect vendor scripts to override this
@@ -219,7 +242,8 @@ extra_cmdline=
 vendor_script=
 uboot_script_bin=
 ptable="gpt"
-steps=("${full_steps[@]}")
+profile_string=
+profile=("${profile_full[@]}")
 
 i=0
 while [ $i -lt $argc ]; do
@@ -254,18 +278,16 @@ while [ $i -lt $argc ]; do
 		vendor_script="${argv[$i]}"
 		i=$((i + 1))
 		;;
+	-p|--profile)
+		profile_string="${argv[$i]}"
+		i=$((i + 1))
+		;;
 	*)
 		echo "Unkown option \"${key}\""
 		usage
 		;;
 	esac
 done
-
-if [ -z "${out}" ]; then echo "Please specify --out"; exit; fi
-if [ -z "${rootfs}" ]; then echo "Please specify --rootfs"; exit; fi
-if [ -z "${label}" ]; then echo "Please specify --label"; exit; fi
-if [ -z "${dtb}" ]; then echo "Please specify --dtb"; exit; fi
-if [ -z "${kernel}" ]; then echo "Please specify --kernel"; exit; fi
 
 if [ -n "${uboot_script}" ]; then
 	case "${uboot_script}" in
@@ -278,6 +300,30 @@ if [ -n "${uboot_script}" ]; then
 	esac
 fi
 
+case "${profile_string}" in
+build_firmware)
+	profile=("${profile_build_firmware[@]}")
+	;;
+flash_firmware)
+	profile=("${profile_flash_firmware[@]}")
+	;;
+""|full)
+	profile=("${profile_full[@]}")
+	;;
+*)
+	echo "Invalid profile ${profile_string}"
+	exit 1
+	;;
+esac
+
+if should_write_to_output_device; then
+	if [ -z "${out}" ]; then echo "Please specify --out"; exit; fi
+	if [ -z "${rootfs}" ]; then echo "Please specify --rootfs"; exit; fi
+	if [ -z "${label}" ]; then echo "Please specify --label"; exit; fi
+	if [ -z "${dtb}" ]; then echo "Please specify --dtb"; exit; fi
+	if [ -z "${kernel}" ]; then echo "Please specify --kernel"; exit; fi
+fi
+
 vendor_sector_start=2048
 rootfs_sector_start=1026048
 
@@ -285,36 +331,38 @@ if [ -n "${vendor_script}" ]; then
 	source "${vendor_script}"
 fi
 
-run_step step_prepare_partition_table
-
-run_step step_mount_loop_device
-
 run_step step_build_firmware
 
 run_step step_prepare_uboot_script
 
-if [ -b "${out}" ]; then
-	dev="${out}"
-	vendor_part="${out}1"
-	rootfs_part="${out}2"
-else
-	dev="${loop}"
-	vendor_part="${loop}p1"
-	rootfs_part="${loop}p2"
+if should_write_to_output_device; then
+	run_step step_prepare_partition_table
+
+	run_step step_mount_loop_device
+
+	if [ -b "${out}" ]; then
+		dev="${out}"
+		vendor_part="${out}1"
+		rootfs_part="${out}2"
+	else
+		dev="${loop}"
+		vendor_part="${loop}p1"
+		rootfs_part="${loop}p2"
+	fi
+
+	run_step step_flash_firmware "${dev}"
+
+	mnt=$(mktemp -d)
+
+	run_step step_prepare_rootfs_partition "${rootfs_part}" "${mnt}/rootfs"
+
+	run_step step_prepare_vendor_partition "${vendor_part}" "${mnt}/vendor"
+
+	run_step step_append_vendor_partition "${mnt}/vendor"
+
+	run_step step_append_rootfs_partition "${mnt}/rootfs"
+
+	run_step step_prepare_fstab
 fi
-
-run_step step_flash_firmware "${dev}"
-
-mnt=$(mktemp -d)
-
-run_step step_prepare_rootfs_partition "${rootfs_part}" "${mnt}/rootfs"
-
-run_step step_prepare_vendor_partition "${vendor_part}" "${mnt}/vendor"
-
-run_step step_append_vendor_partition "${mnt}/vendor"
-
-run_step step_append_rootfs_partition "${mnt}/rootfs"
-
-run_step step_prepare_fstab
 
 sync
