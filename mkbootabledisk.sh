@@ -2,6 +2,8 @@
 
 set -e -u -o pipefail
 
+export TOPDIR=$(cd "$(dirname "${BASH_SOURCE[0]}" )" && pwd)
+
 loop_mounted=false
 rootfs_mounted=false
 vendor_mounted=false
