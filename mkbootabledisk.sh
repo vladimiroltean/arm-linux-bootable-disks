@@ -150,6 +150,10 @@ step_mount_loop_device() {
 	fi
 }
 
+step_build_firmware() {
+	:
+}
+
 step_flash_firmware() {
 	:
 }
