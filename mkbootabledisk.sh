@@ -379,7 +379,7 @@ if should_write_to_output_device; then
 
 	run_step step_append_rootfs_partition "${mnt}/rootfs"
 
-	run_step step_prepare_fstab
+	run_step step_prepare_fstab "${mnt}/rootfs"
 fi
 
 sync
