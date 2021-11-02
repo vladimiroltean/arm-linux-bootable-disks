@@ -56,8 +56,7 @@ get_partuuid() {
 	PARTUUID=*)
 		;;
 	*)
-		echo "Could not determine partition UUID, got ${partuuid}, exiting."
-		exit 1
+		return
 		;;
 	esac
 	# Strip the quotes from the PARTUUID
@@ -181,6 +180,10 @@ step_prepare_rootfs_partition() {
 	sudo bsdtar -xpf "${rootfs}" -C "${rootfs_mnt}" || :
 
 	rootfs_partuuid=$(get_partuuid ${rootfs_part})
+	if [ -z "${rootfs_partuuid}" ]; then
+		echo "Could not determine rootfs partition UUID, exiting"
+		return 1
+	fi
 
 	tty=${console%,*}
 	if [ -f "${rootfs_mnt}/etc/securetty" ]; then
@@ -198,6 +201,10 @@ step_prepare_vendor_partition() {
 	sudo mkfs.vfat $vendor_part
 
 	vendor_partuuid=$(get_partuuid ${vendor_part})
+	if [ -z "${vendor_partuuid}" ]; then
+		echo "Could not determine vendor partition UUID, exiting"
+		return 1
+	fi
 
 	echo "Creating vendor partition..."
 	sudo mkdir -p "${vendor_mnt}"
