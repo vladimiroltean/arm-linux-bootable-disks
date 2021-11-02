@@ -324,7 +324,11 @@ esac
 
 if should_write_to_output_device; then
 	if [ -z "${out}" ]; then echo "Please specify --out"; exit; fi
+fi
+if [[ "${profile[*]}" =~ step_prepare_rootfs_partition ]]; then
 	if [ -z "${rootfs}" ]; then echo "Please specify --rootfs"; exit; fi
+fi
+if [[ "${profile[*]}" =~ step_prepare_vendor_partition ]]; then
 	if [ -z "${label}" ]; then echo "Please specify --label"; exit; fi
 	if [ -z "${dtb}" ]; then echo "Please specify --dtb"; exit; fi
 	if [ -z "${kernel}" ]; then echo "Please specify --kernel"; exit; fi
