@@ -15,6 +15,19 @@ archive. The input folder (passed via the --mount-point argument) can be
 a dump of an existing rootfs, a rootfs minimally set up using
 debootstrap, a rootfs downloaded from https://archlinuxarm.org/, etc.
 
+Example for Debian Bullseye on armv7:
+
+```
+sudo apt install debootstrap qemu-user-static
+OUT="debian-bullseye-armhf"
+sudo debootstrap --arch armhf --foreign bullseye $OUT
+sudo cp "$(which qemu-arm-static)" "${OUT}/usr/bin"
+sudo chroot "$OUT" /debootstrap/debootstrap --second-stage
+sudo chroot "$OUT" passwd
+sudo ./backup-rootfs.sh --mount-point $OUT --rootfs debian-bullseye-armv7.tar.gz
+sudo rm -rf $OUT
+```
+
 mkbootabledisk.sh
 -----------------
 
@@ -31,3 +44,15 @@ partitions.
 
 - Second partition is the "rootfs" partition. This contains an unaltered
   copy of the extracted tarball provided by the user.
+
+Example for Debian Bullseye on armv7:
+
+```
+./mkbootabledisk.sh \
+	--rootfs debian-bullseye-armv7.tar.gz \
+	--label "Debian Bullseye" \
+	--dtb /opt/arm-linux/arch/arm/boot/dts/ls1021a-tsn.dtb \
+	--kernel /opt/arm-linux/arch/arm/boot/uImage \
+	--vendor-script vendor/ls1021a/ls1021atsn_vendor.sh \
+	--out /dev/sdN
+```
