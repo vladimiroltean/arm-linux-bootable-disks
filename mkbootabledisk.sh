@@ -51,7 +51,7 @@ get_partuuid() {
 	local partition="${1}"
 	local partuuid=
 
-	partuuid=$(blkid "${partition}" | awk '{ for(i=1;i<=NF;i++) if ($i ~ /PARTUUID/) print $i }')
+	partuuid=$(sudo blkid "${partition}" | awk '{ for(i=1;i<=NF;i++) if ($i ~ /PARTUUID/) print $i }')
 	case ${partuuid} in
 	PARTUUID=*)
 		;;
