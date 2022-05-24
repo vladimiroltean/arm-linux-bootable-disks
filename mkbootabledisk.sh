@@ -235,8 +235,8 @@ step_prepare_fstab() {
 	local rootfs_mnt="${1}"
 
 	sudo bash -c "cat > ${rootfs_mnt}/etc/fstab" <<-EOF
-PARTUUID="${vendor_partuuid}"	/boot		vfat	auto	0	0
-PARTUUID="${rootfs_partuuid}"	/		ext4	auto	0	0
+${vendor_partuuid}	/boot		vfat	auto	0	0
+${rootfs_partuuid}	/		ext4	auto	0	0
 	EOF
 }
 
