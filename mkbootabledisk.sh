@@ -258,6 +258,10 @@ ptable="gpt"
 profile_string=
 profile=("${profile_full[@]}")
 
+if [ $argc = 0 ]; then
+	usage
+fi
+
 i=0
 while [ $i -lt $argc ]; do
 	key="${argv[$i]}"
