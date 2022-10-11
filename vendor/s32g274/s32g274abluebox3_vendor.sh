@@ -2,12 +2,12 @@ source "${TOPDIR}/vendor/s32g274/s32g2_common.sh"
 
 step_build_firmware()
 {
-	s32g2_build_firmware s32g274abluebox3_defconfig
+	s32g2_build_firmware s32g274abluebox3_defconfig s32g274abluebox3
 }
 
 step_flash_firmware()
 {
-	s32g2_flash_firmware "${1}"
+	s32g2_flash_firmware "${1}" s32g274abluebox3
 }
 
 step_append_vendor_partition()
