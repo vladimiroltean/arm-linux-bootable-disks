@@ -43,6 +43,7 @@ s32g2_append_rootfs_partition()
 {
 	local rootfs="${1}"
 
+	sudo mkdir -p "${rootfs}/lib/firmware/"
 	sudo ln -s /boot/s32g_pfe_class.fw "${rootfs}/lib/firmware/s32g_pfe_class.fw"
 	sudo ln -s /boot/s32g_pfe_util.fw "${rootfs}/lib/firmware/s32g_pfe_util.fw"
 }
