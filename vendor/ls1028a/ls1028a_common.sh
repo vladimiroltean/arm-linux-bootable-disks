@@ -8,7 +8,7 @@ ls1028a_build_firmware()
 	local uboot="/opt/u-boot"
 	local atf="/opt/qoriq-atf"
 	local rcw="/opt/qoriq-rcw"
-	local toolchain="/opt/gcc-arm-10.2-2020.11-x86_64-aarch64-none-linux-gnu/envsetup"
+	local toolchain="/opt/gcc-arm-11.2-2022.02-x86_64-aarch64-none-linux-gnu/envsetup"
 
 	source "${toolchain}"
 	make -C "${rcw}/${board}" clean
