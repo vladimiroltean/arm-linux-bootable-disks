@@ -26,8 +26,6 @@ ls1028a_build_firmware()
 ls1028a_flash_firmware()
 {
 	local dev="${1}"
-	local board="${2}"
-	local boot_mode="${3}"
 	local atf="/opt/qoriq-atf"
 
 	sudo dd if="${atf}/build/${board}/release/bl2_${boot_mode}.pbl" of="${dev}" bs=512 seek=8 conv=notrunc
