@@ -1,5 +1,6 @@
 #!/bin/bash
 
+build_dir="$(cd "$(dirname "${BASH_SOURCE[0]}" )" && pwd)/build"
 vendor_sector_start=10000
 ptable="mbr"
 
@@ -11,13 +12,14 @@ ls1028a_build_firmware()
 	local toolchain="/opt/gcc-arm-11.2-2022.02-x86_64-aarch64-none-linux-gnu/envsetup"
 
 	source "${toolchain}"
+	export KBUILD_OUTPUT="${build_dir}" # must come after "source", since toolchain may also provide it
 	make -C "${rcw}/${board}" clean
 	make -C "${rcw}/${board}" -j 8
 	make -C "${uboot}" clean "${defconfig}"
 	make -C "${uboot}" -j 8
 	make -C "${atf}" clean
 	make -C "${atf}" PLAT=${board} bl2 BOOT_MODE=${boot_mode} pbl RCW="${rcw}/${board}/${rcw_bin}"
-	make -C "${atf}" PLAT=${board} fip BL33="${uboot}/u-boot.bin"
+	make -C "${atf}" PLAT=${board} fip BL33="${build_dir}/u-boot.bin"
 }
 
 ls1028a_flash_firmware()
