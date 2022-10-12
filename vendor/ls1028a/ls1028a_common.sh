@@ -16,6 +16,7 @@ ls1028a_build_firmware()
 	make -C "${rcw}/${board}" clean
 	make -C "${rcw}/${board}" -j 8
 	make -C "${uboot}" clean "${defconfig}"
+	sed -i -e 's|CONFIG_SYS_BOOTM_LEN.*|CONFIG_SYS_BOOTM_LEN=0x8000000|' "${build_dir}/.config"
 	make -C "${uboot}" -j 8
 	make -C "${atf}" clean
 	make -C "${atf}" PLAT=${board} bl2 BOOT_MODE=${boot_mode} pbl RCW="${rcw}/${board}/${rcw_bin}"
